@@ -54,13 +54,51 @@ miot-ids/
 │   └── train.py                 # entry point: ties it all together
 └── models/                      # saved global model checkpoints
 ```
+## Demo notes: what's real vs simulated
+
+- **Real**: Traffic data is from CICIoMT2024, a peer-reviewed IoMT security 
+  benchmark dataset built by the Canadian Institute for Cybersecurity, 
+  containing genuine network flow captures from IoMT devices under 18 attack 
+  types plus benign traffic.
+- **Real**: Model predictions — the classifier genuinely evaluates each 
+  traffic sample's features and decides normal vs suspicious in real time.
+- **Simulated**: Device names (e.g. "ECG Monitor - Room 101") — the dataset 
+  doesn't include device identity, so device names are assigned per-sample 
+  to demonstrate a realistic hospital-fleet monitoring scenario.
+- **Simulated**: The "live" feed — historical dataset rows are replayed with 
+  artificial delay to emulate a live stream, since no physical IoMT hardware 
+  was available for this project.
 
 ## How to run (once you plug in a real dataset)
 
 ```bash
 pip install -r requirements.txt
 python src/train.py --config config.yaml
+# 1. Set up environment
+python -m venv venv
+venv\Scripts\activate  # or source venv/bin/activate on Mac/Linux
+pip install -r requirements.txt
+
+# 3. Preprocess
+python src/preprocessing.py
+
+# 4. Train baseline model
+python src/train.py
+
+# 5. Launch dashboard
+streamlit run src/dashboard.py
+
+# 2. Download CICIoMT2024 into data/raw/ (see data/README.md)
+
 ```
+
+## Current status
+
+- ✅ Baseline model (Random Forest, binary attack/benign detection, ~99.99% accuracy)
+- ✅ Live traffic simulation + alert engine
+- ✅ Streamlit dashboard with device status, attack chart, live alert feed
+- 🔄 In progress: federated learning + autoencoder-based anomaly detection + 
+  drift monitoring + SHAP explainability (see `train_advanced.py`)
 
 ## Recommended datasets to start with
 
