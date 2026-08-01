@@ -15,7 +15,6 @@ from simulate_traffic import stream_traffic
 MODEL_PATH = os.path.join("models", "baseline_rf.pkl")
 FEATURE_COLS_PATH = os.path.join("models", "feature_columns.txt")
 
-# Columns present in the raw data that are NOT model features (labels)
 NON_FEATURE_COLS = ["label", "binary_label"]
 
 
@@ -27,18 +26,11 @@ def load_model_and_features():
 
 
 def row_to_features(row, feature_cols):
-    """Extract just the model's expected feature columns from a raw data row,
-    in the correct order, as a single-row DataFrame ready for prediction."""
     values = {col: row[col] for col in feature_cols}
     return pd.DataFrame([values])
 
 
 def generate_alerts(sample_size=100, delay=0.0):
-    """
-    Runs simulated traffic through the model one row at a time.
-    Yields a structured alert dict for EVERY event (both normal and suspicious),
-    so the dashboard can show live status for all devices, not just attacks.
-    """
     model, feature_cols = load_model_and_features()
 
     for device, row in stream_traffic(sample_size=sample_size, delay=delay):
@@ -47,14 +39,14 @@ def generate_alerts(sample_size=100, delay=0.0):
         proba = model.predict_proba(X)[0]
         confidence = max(proba)
 
-        true_label = row.get("label", "unknown")  # for our own testing only
+        true_label = row.get("label", "unknown")
 
         alert = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "device": device,
             "status": "suspicious" if prediction == "attack" else "normal",
             "confidence": round(float(confidence), 4),
-            "true_label": true_label,  # remove/hide this in the final dashboard demo
+            "true_label": true_label,
         }
         yield alert
 

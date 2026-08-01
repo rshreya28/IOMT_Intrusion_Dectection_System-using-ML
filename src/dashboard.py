@@ -1,31 +1,44 @@
 """
 dashboard.py
 Live-updating Streamlit dashboard for the MIoT Intrusion Detection System.
-Shows simulated device traffic being classified in real time, with a
-device status panel and a scrolling alert feed.
+Supports switching between:
+  - Path A: Baseline Random Forest (fast, simple, binary classifier)
+  - Path B: Federated Autoencoder (privacy-preserving, anomaly-based,
+            explainable via SHAP, drift-aware)
 
 Run with: streamlit run src/dashboard.py
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import pandas as pd
-import time
 
 from alert_engine import generate_alerts
+from alert_engine_advanced import generate_alerts_advanced
 
 st.set_page_config(page_title="MIoT-IDS Live Dashboard", layout="wide")
 
 st.title("🏥 Medical IoT — Intrusion Detection Dashboard")
-st.caption("Live simulated device traffic, classified in real time by the baseline model.")
+st.caption("Live simulated device traffic, classified in real time.")
 
 # --- Controls ---
-col_a, col_b, col_c = st.columns(3)
+col_a, col_b, col_c, col_d = st.columns(4)
 with col_a:
-    sample_size = st.slider("Number of events to simulate", 20, 500, 100, step=20)
+    model_choice = st.selectbox(
+        "Detection model",
+        ["Path A: Baseline (Random Forest)", "Path B: Federated Autoencoder"],
+    )
 with col_b:
-    delay = st.slider("Delay between events (seconds)", 0.0, 1.0, 0.1, step=0.05)
+    sample_size = st.slider("Number of events to simulate", 20, 500, 100, step=20)
 with col_c:
+    delay = st.slider("Delay between events (seconds)", 0.0, 1.0, 0.1, step=0.05)
+with col_d:
     start = st.button("▶ Start Simulation", type="primary")
+
+st.divider()
 
 # --- Layout placeholders ---
 status_placeholder = st.empty()
@@ -33,13 +46,20 @@ chart_placeholder = st.empty()
 feed_placeholder = st.empty()
 
 if start:
-    device_status = {}   # device -> latest status
-    alert_log = []        # running list of alerts, most recent first
+    device_status = {}
+    alert_log = []
     attack_type_counts = {}
 
-    for alert in generate_alerts(sample_size=sample_size, delay=delay):
+    is_advanced = model_choice.startswith("Path B")
+
+    if is_advanced:
+        alert_stream = generate_alerts_advanced(sample_size=sample_size, delay=delay)
+    else:
+        alert_stream = generate_alerts(sample_size=sample_size, delay=delay)
+
+    for alert in alert_stream:
         device_status[alert["device"]] = alert["status"]
-        alert_log.insert(0, alert)  # newest first
+        alert_log.insert(0, alert)
 
         if alert["status"] == "suspicious":
             attack_type_counts[alert["true_label"]] = attack_type_counts.get(alert["true_label"], 0) + 1
@@ -65,9 +85,29 @@ if start:
         # --- Live alert feed ---
         with feed_placeholder.container():
             st.subheader("🚨 Live Alert Feed")
-            feed_df = pd.DataFrame(alert_log[:30])  # show last 30 events
-            st.dataframe(feed_df, use_container_width=True, hide_index=True)
+            feed_df = pd.DataFrame(alert_log[:30])
 
-    st.success("Simulation complete.")
+            if is_advanced:
+                display_cols = ["timestamp", "device", "status",
+                                 "reconstruction_error", "reason", "true_label"]
+            else:
+                display_cols = ["timestamp", "device", "status",
+                                 "confidence", "true_label"]
+
+            display_cols = [c for c in display_cols if c in feed_df.columns]
+            st.dataframe(feed_df[display_cols], use_container_width=True, hide_index=True)
+
+    st.success(f"Simulation complete — {model_choice}")
 else:
-    st.info("Set your simulation options above and click **Start Simulation**.")
+    st.info("Choose a model and settings above, then click **Start Simulation**.")
+    st.markdown("""
+    **Path A — Baseline (Random Forest):** fast, supervised, trained centrally 
+    on all data. Simple and highly accurate on this dataset, but requires 
+    pooling raw data in one place.
+
+    **Path B — Federated Autoencoder:** trains across 5 simulated hospitals 
+    without sharing raw data (only model weights), learns only from *normal* 
+    traffic, flags anomalies via reconstruction error, and explains each 
+    alert with SHAP. Slower per-alert (SHAP explanation), but privacy-preserving 
+    and more aligned with real healthcare data-sharing constraints.
+    """)
